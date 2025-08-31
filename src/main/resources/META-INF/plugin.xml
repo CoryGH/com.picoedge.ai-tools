@@ -1,0 +1,39 @@
+<idea-plugin>
+    <id>com.picoedge.ai-tools</id>
+    <name>picoEdge AI-Tools</name>
+    <vendor>picoEdge</vendor>
+    <description><![CDATA[
+    Enhances IntelliJ-based IDEs with advanced file handling actions in the Project view context menu:
+    <ul>
+      <li><b>Copy Contents</b>: Copies the contents of selected files and directories (recursively) to the clipboard, formatted with file headers and language-specific code blocks, customizable with prefix and suffix text via a project-level .env file.</li>
+      <li><b>Paste Contents</b>: Parses clipboard content in the same format and creates or updates files in the selected directory, maintaining a .latest version for diff tracking.</li>
+      <li><b>Copy Diff</b>: Generates diffs of selected files against their latest .old or .latest version in patch-package format, with customizable prefix and suffix text.</li>
+      <li><b>Paste Diff</b>: Applies diffs from the clipboard to create or update files, storing a .latest version for future diffs.</li>
+    </ul>
+    Supports configuration via a .env file for file extensions, prefix/suffix text, and diff-specific settings, with intelligent binary file detection for .astro files.
+  ]]></description>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <actions>
+        <action id="com.picoedge.ai_tools.CopyContentsAction" class="com.picoedge.ai_tools.CopyContentsAction" text="Copy Contents"
+                description="Copy selected files' contents to clipboard with formatting">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="com.picoedge.ai_tools.PasteContentsAction" class="com.picoedge.ai_tools.PasteContentsAction" text="Paste Contents"
+                description="Paste clipboard contents as files in the selected directory">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <!-- Temporarily hidden: CopyDiffAction
+        <action id="com.picoedge.ai_tools.CopyDiffAction" class="com.picoedge.ai_tools.CopyDiffAction" text="Copy Diff"
+                description="Copy diffs of selected files in patch-package format">
+          <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        -->
+        <!-- Temporarily hidden: PasteDiffAction
+        <action id="com.picoedge.ai_tools.PasteDiffAction" class="com.picoedge.ai_tools.PasteDiffAction" text="Paste Diff"
+                description="Apply diffs from clipboard to create or update files">
+          <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        -->
+    </actions>
+</idea-plugin>
