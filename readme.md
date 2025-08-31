@@ -10,4 +10,3 @@ Enhances IntelliJ-based IDEs (including Android Studio) with advanced file handl
 * **IntelliJ IDEA Community/Ultimate 2023.2+:** The IDE where the plugin will be developed and tested. Download from JetBrains.
 * **Gradle 8.10:** Used for building the plugin. Can be installed globally or locally via the Gradle Wrapper (preferred, see below). Download from Gradle Releases.
 * **Git (optional):** For cloning the repository. Download from Git.
-* 
