@@ -3,17 +3,21 @@
     <name>picoEdge AI-Tools</name>
     <vendor>picoEdge</vendor>
     <description><![CDATA[
-    Enhances IntelliJ-based IDEs with advanced file handling actions in the Project view context menu:
+    Enhances IntelliJ-based IDEs with advanced file handling and logging capabilities in the Project view context menu and a dedicated tool window:
     <ul>
       <li><b>Copy Contents</b>: Copies the contents of selected files and directories (recursively) to the clipboard, formatted with file headers and language-specific code blocks, customizable with prefix and suffix text via a project-level .env file.</li>
       <li><b>Paste Contents</b>: Parses clipboard content in the same format and creates or updates files in the selected directory, maintaining a .latest version for diff tracking.</li>
       <li><b>Copy Diff</b>: Generates diffs of selected files against their latest .old or .latest version in patch-package format, with customizable prefix and suffix text.</li>
       <li><b>Paste Diff</b>: Applies diffs from the clipboard to create or update files, storing a .latest version for future diffs.</li>
+      <li><b>Logger Tool Window</b>: A Logcat-style bottom tool window for real-time log monitoring, with filters for log level, source, and category, and controls for WebSocket server connection, stack trace toggling, clearing, and copying logs.</li>
     </ul>
     Supports configuration via a .env file for file extensions, prefix/suffix text, and diff-specific settings, with intelligent binary file detection for .astro files.
   ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="AI Logger" anchor="bottom" icon="/icons/logger.svg" factoryClass="com.picoedge.ai_tools.LogPaneToolWindowFactory"/>
+    </extensions>
     <actions>
         <action id="com.picoedge.ai_tools.CopyContentsAction" class="com.picoedge.ai_tools.CopyContentsAction" text="Copy Contents"
                 description="Copy selected files' contents to clipboard with formatting">

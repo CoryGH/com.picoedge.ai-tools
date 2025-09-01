@@ -2,39 +2,34 @@ plugins {
     id 'java'
     id 'org.jetbrains.intellij' version '1.17.0'
 }
-
 group 'com.picoedge'
 version '1.0-SNAPSHOT'
-
 repositories {
     mavenCentral()
 }
-
 dependencies {
     implementation 'org.apache.commons:commons-lang3:3.14.0'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.6' // Added for WebSocket server
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2' // Added for JSON parsing in LogPane
 }
-
 // Configure the IntelliJ plugin
 intellij {
     version.set('2023.2.5') // Compatible with Android Studio Iguana
     type.set('IC') // IntelliJ Community
     plugins.set(['java']) // Required for Android Studio
 }
-
 // Patch plugin.xml during build
 patchPluginXml {
     sinceBuild.set('232')
     untilBuild.set('299.*')
-    pluginDescription.set('A plugin to copy contents of selected files and directories in a formatted way to the clipboard.')
-    changeNotes.set('Initial release with support for copying file contents with language-specific code blocks.')
+    pluginDescription.set('A plugin providing file handling and real-time logging capabilities, including copying file contents, applying diffs, and a Logcat-style logger tool window.')
+    changeNotes.set('Added logger tool window for real-time log monitoring with WebSocket support.')
 }
-
 // Ensure proper Java version compatibility
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
-
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }

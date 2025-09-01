@@ -20,6 +20,7 @@ public class FileProcessor {
     private final String suffixText;
     private final String diffPrefixText;
     private final String diffSuffixText;
+    private final boolean disableFileTree; // Added to control file tree output
     private static final double BINARY_THRESHOLD = 0.1;
     static final String[] DEFAULT_ENV = loadDefaultEnv();
 
@@ -70,7 +71,11 @@ public class FileProcessor {
                     "COM_PICOEDGE_AI_TOOLS_SUFFIX_TEXT=",
                     "COM_PICOEDGE_AI_TOOLS_DIFF_PREFIX_TEXT=\\n\\n## Diff Files in Patch-Package Format\\n\\nThe following files represent diffs in patch-package format, showing changes against the latest .old version or as new files if no previous version exists. Please provide output in the same diff format, inclusive of file hierarchy of included files at the top:\\n\\n",
                     "COM_PICOEDGE_AI_TOOLS_DIFF_SUFFIX_TEXT=",
-                    "COM_PICOEDGE_AI_TOOLS_TOUCHED=COM_PICOEDGE_AI_TOOLS_INCLUDE_EXTENSIONS,COM_PICOEDGE_AI_TOOLS_EXCLUDE_EXTENSIONS,COM_PICOEDGE_AI_TOOLS_PREFIX_TEXT,COM_PICOEDGE_AI_TOOLS_SUFFIX_TEXT,COM_PICOEDGE_AI_TOOLS_DIFF_PREFIX_TEXT,COM_PICOEDGE_AI_TOOLS_DIFF_SUFFIX_TEXT"
+                    "COM_PICOEDGE_AI_TOOLS_TOUCHED=COM_PICOEDGE_AI_TOOLS_INCLUDE_EXTENSIONS,COM_PICOEDGE_AI_TOOLS_EXCLUDE_EXTENSIONS,COM_PICOEDGE_AI_TOOLS_PREFIX_TEXT,COM_PICOEDGE_AI_TOOLS_SUFFIX_TEXT,COM_PICOEDGE_AI_TOOLS_DIFF_PREFIX_TEXT,COM_PICOEDGE_AI_TOOLS_DIFF_SUFFIX_TEXT,COM_PICOEDGE_AI_TOOLS_DISABLE_FILE_TREE,COM_PICOEDGE_AI_TOOLS_LOGGER_MAX_LOGS,COM_PICOEDGE_AI_TOOLS_LOGGER_WS_URL,COM_PICOEDGE_AI_TOOLS_LOGGER_USE_LOCAL_SERVER",
+                    "COM_PICOEDGE_AI_TOOLS_DISABLE_FILE_TREE=false",
+                    "COM_PICOEDGE_AI_TOOLS_LOGGER_MAX_LOGS=10000",
+                    "COM_PICOEDGE_AI_TOOLS_LOGGER_WS_URL=ws://localhost:1065/ws",
+                    "COM_PICOEDGE_AI_TOOLS_LOGGER_USE_LOCAL_SERVER=true"
             };
         }
     }
@@ -117,6 +122,7 @@ public class FileProcessor {
         String suffix = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_SUFFIX_TEXT", "");
         String diffPrefix = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_DIFF_PREFIX_TEXT", "");
         String diffSuffix = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_DIFF_SUFFIX_TEXT", "");
+        String disableFileTreeStr = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_DISABLE_FILE_TREE", "false");
 
         if (StringUtils.isNotBlank(includeExt)) {
             includeExtensions = new HashSet<>(Arrays.asList(includeExt.toLowerCase().split("\\s*,\\s*")));
@@ -134,6 +140,7 @@ public class FileProcessor {
         this.suffixText = suffix;
         this.diffPrefixText = diffPrefix;
         this.diffSuffixText = diffSuffix;
+        this.disableFileTree = Boolean.parseBoolean(disableFileTreeStr); // Initialize from .env
     }
 
     public String getPrefixText() {
@@ -156,7 +163,7 @@ public class FileProcessor {
         filePaths.clear();
         StringBuilder result = new StringBuilder();
         Arrays.stream(files).forEach(file -> processFile(file, result));
-        String tree = buildAsciiTree();
+        String tree = disableFileTree ? "" : buildAsciiTree(); // Skip tree if disabled
         String output = tree + result.toString();
         return output.isEmpty() ? "" : output;
     }
@@ -165,7 +172,7 @@ public class FileProcessor {
         filePaths.clear();
         StringBuilder result = new StringBuilder();
         Arrays.stream(files).forEach(file -> processFileForDiff(file, result));
-        String tree = buildAsciiTree();
+        String tree = disableFileTree ? "" : buildAsciiTree(); // Skip tree if disabled
         String output = tree + result.toString();
         return output.isEmpty() ? "" : output;
     }
