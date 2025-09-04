@@ -32,4 +32,5 @@ java {
 }
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+    options.compilerArgs << '-Xlint:deprecation' // Enable deprecation warnings to identify deprecated API
 }

@@ -1,5 +1,4 @@
 package com.picoedge.ai_tools;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.project.Project;
@@ -11,15 +10,14 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.java_websocket.handshake.ServerHandshake;
+
 import javax.swing.*;
 import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.*;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.URI;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.List;
@@ -45,7 +43,7 @@ public class LogPane {
     private final WebSocketServerImpl server;
     private WebSocketClient client;
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
-    private final java.util.List<LogEvent> allLogs = Collections.synchronizedList(new ArrayList<>());
+    private final List<LogEvent> allLogs = Collections.synchronizedList(new ArrayList<>());
     private final Set<String> processedEventIds = Collections.synchronizedSet(new LinkedHashSet<>() {
         private final int maxSize = 10000; // Limit to prevent memory leaks
         @Override
@@ -58,12 +56,12 @@ public class LogPane {
             return added;
         }
     });
-    private final java.util.List<String> availableCategories = Collections.synchronizedList(new ArrayList<>(Collections.singletonList("test.websocket")));
-    private final java.util.List<String> availableSources = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> availableCategories = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> availableSources = Collections.synchronizedList(new ArrayList<>());
     private int maxLogs = 10000;
     private boolean defaultStackExpanded = false;
     private int selectedLevels = 255;
-    private String wsUrl = "ws://localhost:1065/ws";
+    private String wsUrl; // Initialized in loadSettings
     private boolean useLocalServer = true;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Properties envProps = new Properties();
@@ -72,23 +70,41 @@ public class LogPane {
     private final int maxReconnectAttempts = 5;
     private final long baseReconnectDelay = 500;
     private final long maxReconnectDelay = 10000;
+    // Device ID for WebSocket client
+    private final String deviceId = UUID.randomUUID().toString();
 
     public enum LogLevel {
         Null(0), Trace(1), Debug(2), Info(4), Notice(8), Warning(16), Error(32), Critical(64), Fatal(128);
         private final int value;
-        LogLevel(int value) { this.value = value; }
-        public int getValue() { return value; }
+
+        LogLevel(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
         public static String toString(int level) {
             switch (level) {
-                case 1: return "Trace";
-                case 2: return "Debug";
-                case 4: return "Info";
-                case 8: return "Notice";
-                case 16: return "Warning";
-                case 32: return "Error";
-                case 64: return "Critical";
-                case 128: return "Fatal";
-                default: return "Unknown";
+                case 1:
+                    return "Trace";
+                case 2:
+                    return "Debug";
+                case 4:
+                    return "Info";
+                case 8:
+                    return "Notice";
+                case 16:
+                    return "Warning";
+                case 32:
+                    return "Error";
+                case 64:
+                    return "Critical";
+                case 128:
+                    return "Fatal";
+                default:
+                    return "Unknown";
             }
         }
     }
@@ -101,7 +117,7 @@ public class LogPane {
         long timestamp;
         String source;
         String correlationId;
-        java.util.List<Map<String, Object>> stacktrace;
+        List<Map<String, Object>> stacktrace;
         boolean stacktraceExpanded;
         String title;
         Integer code;
@@ -110,17 +126,17 @@ public class LogPane {
         Boolean includeStacktrace;
 
         LogEvent(String id, int level, String category, String description, long timestamp, String source,
-                 String correlationId, java.util.List<Map<String, Object>> stacktrace, String title, Integer code,
+                 String correlationId, List<Map<String, Object>> stacktrace, String title, Integer code,
                  Object data, String deviceId, Boolean includeStacktrace) {
             this.id = id;
             this.level = level;
-            this.category = category != null ? category : "test.websocket";
+            this.category = category != null ? category : "general";
             this.description = description != null ? description : "";
             this.timestamp = timestamp;
             this.source = source != null ? source : "unknown";
             this.correlationId = correlationId;
             this.stacktrace = stacktrace;
-            this.stacktraceExpanded = stacktrace != null && !stacktrace.isEmpty() ? false : false;
+            this.stacktraceExpanded = stacktrace != null && !stacktrace.isEmpty();
             this.title = title;
             this.code = code;
             this.data = data;
@@ -153,7 +169,10 @@ public class LogPane {
         public void onMessage(WebSocket conn, String message) {
             processMessage(message);
             activeConnections.values().forEach(client -> {
-                if (client.isOpen()) client.send(message);
+                if (client != conn && client.isOpen()) {
+                    client.send(message);
+                    System.out.println("[LogPane] Forwarded message to client: " + message);
+                }
             });
         }
 
@@ -191,7 +210,15 @@ public class LogPane {
             System.out.println("[LogPane] WebSocket client connected to " + wsUrl);
             isConnected.set(true);
             reconnectAttempts = 0;
+            processedEventIds.clear(); // Clear processed IDs to avoid duplicate filtering
             updateConnectButton();
+            // Send subscription filter to server
+            try {
+                send("{\"action\":\"subscribe\",\"filter\":{\"level\":255,\"excludeCategory\":[\"logger.pane\",\"logger.server\"]}}");
+                System.out.println("[LogPane] Sent subscription filter to server");
+            } catch (Exception e) {
+                System.out.println("[LogPane] Failed to send subscription filter: " + e.getMessage());
+            }
         }
 
         @Override
@@ -205,7 +232,7 @@ public class LogPane {
             System.out.println("[LogPane] WebSocket client disconnected, code: " + code + ", reason: " + reason);
             isConnected.set(false);
             updateConnectButton();
-            if (reconnectAttempts < maxReconnectAttempts) {
+            if (reconnectAttempts < maxReconnectAttempts && code != 1000) {
                 long delay = Math.min(baseReconnectDelay * (1L << reconnectAttempts), maxReconnectDelay);
                 reconnectAttempts++;
                 System.out.println("[LogPane] Reconnecting WebSocket client in " + delay + "ms (attempt " + reconnectAttempts + ")");
@@ -216,47 +243,59 @@ public class LogPane {
                     }
                 }, delay);
             } else {
-                System.out.println("[LogPane] Max reconnection attempts reached");
-                Messages.showMessageDialog(project, "Max reconnection attempts reached for WebSocket client", "Error", Messages.getErrorIcon());
+                System.out.println("[LogPane] Max reconnection attempts reached or normal close");
             }
         }
 
         @Override
         public void onError(Exception ex) {
-            System.out.println("[LogPane] WebSocket client error: " + ex.getMessage());
+            System.out.println("[LogPane] WebSocket client error: " + ex.getMessage() + ", stacktrace: " + Arrays.toString(ex.getStackTrace()));
             Messages.showMessageDialog(project, "WebSocket client error: " + ex.getMessage(), "Error", Messages.getErrorIcon());
         }
 
         @Override
         public void reconnect() {
             try {
-                client = new WebSocketClientImpl(new URI(wsUrl));
+                // Include deviceId in WebSocket URL for reconnection
+                client = new WebSocketClientImpl(new URI(wsUrl + "?deviceId=" + URLEncoder.encode(deviceId, StandardCharsets.UTF_8.name())));
                 client.connect();
+                System.out.println("[LogPane] Reconnection attempt initiated to " + wsUrl);
             } catch (Exception e) {
-                System.out.println("[LogPane] Reconnection attempt failed: " + e.getMessage());
+                System.out.println("[LogPane] Reconnection attempt failed: " + e.getMessage() + ", stacktrace: " + Arrays.toString(e.getStackTrace()));
             }
         }
     }
 
     private void loadSettings() {
         String basePath = project.getBasePath();
-        if (basePath == null) return;
+        if (basePath == null) {
+            System.out.println("[LogPane] Project base path is null, using default settings");
+            wsUrl = "ws://localhost:1065/ws"; // Default to match server endpoint
+            return;
+        }
         VirtualFile projectDir = VfsUtil.findFileByIoFile(new java.io.File(basePath), true);
-        if (projectDir == null) return;
+        if (projectDir == null) {
+            System.out.println("[LogPane] Project directory not found, using default settings");
+            wsUrl = "ws://localhost:1065/ws"; // Default to match server endpoint
+            return;
+        }
         envFile = projectDir.findChild(".env");
         if (envFile != null && envFile.exists()) {
             try {
                 envProps.load(new java.io.StringReader(new String(envFile.contentsToByteArray(), StandardCharsets.UTF_8)));
                 String maxLogsStr = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_LOGGER_MAX_LOGS", "10000");
-                String wsUrlStr = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_LOGGER_WS_URL", "ws://localhost:1065/ws");
+                wsUrl = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_LOGGER_WS_URL", "ws://localhost:1065/ws");
                 String useLocalServerStr = envProps.getProperty("COM_PICOEDGE_AI_TOOLS_LOGGER_USE_LOCAL_SERVER", "true");
                 maxLogs = Integer.parseInt(maxLogsStr);
-                wsUrl = wsUrlStr;
                 useLocalServer = Boolean.parseBoolean(useLocalServerStr);
                 System.out.println("[LogPane] Loaded settings: maxLogs=" + maxLogs + ", wsUrl=" + wsUrl + ", useLocalServer=" + useLocalServer);
             } catch (IOException | NumberFormatException e) {
                 System.out.println("[LogPane] Failed to load .env settings: " + e.getMessage());
+                wsUrl = "ws://localhost:1065/ws"; // Default to match server endpoint
             }
+        } else {
+            System.out.println("[LogPane] .env file not found, using default settings");
+            wsUrl = "ws://localhost:1065/ws"; // Default to match server endpoint
         }
     }
 
@@ -294,16 +333,25 @@ public class LogPane {
     private void processMessage(String message) {
         try {
             System.out.println("[LogPane] Raw WebSocket message received: " + message);
-            @SuppressWarnings("unchecked")
             Map<String, Object> json = objectMapper.readValue(message, Map.class);
             String id = (String) json.get("id");
-            if (id == null || processedEventIds.contains(id)) {
-                System.out.println("[LogPane] Skipping duplicate or invalid event: " + id);
+            if (id == null) {
+                System.out.println("[LogPane] Skipping message with null ID");
+                return;
+            }
+            if (processedEventIds.contains(id)) {
+                System.out.println("[LogPane] Skipping duplicate event: " + id);
+                return;
+            }
+            // Skip events from the same deviceId to prevent echo
+            String eventDeviceId = (String) json.get("deviceId");
+            if (deviceId.equals(eventDeviceId)) {
+                System.out.println("[LogPane] Skipping event from own deviceId: " + eventDeviceId);
                 return;
             }
             processedEventIds.add(id);
             Integer level = (Integer) json.getOrDefault("level", LogLevel.Info.getValue());
-            String category = (String) json.getOrDefault("category", "test.websocket");
+            String category = (String) json.getOrDefault("category", "general");
             String description = (String) json.getOrDefault("description", "");
             String source = (String) json.getOrDefault("source", "unknown");
             String correlationId = (String) json.get("correlationId");
@@ -313,14 +361,25 @@ public class LogPane {
             String title = (String) json.get("title");
             Integer code = json.get("code") instanceof Number ? ((Number) json.get("code")).intValue() : null;
             Object data = json.get("data");
-            String deviceId = (String) json.get("deviceId");
             Boolean includeStacktrace = json.get("includeStacktrace") instanceof Boolean ? (Boolean) json.get("includeStacktrace") : null;
-            System.out.println("[LogPane] Parsed event: id=" + id + ", source=" + source + ", category=" + category + ", level=" + LogLevel.toString(level) + ", description=" + description);
-            if (category.equals("test.websocket")) {
-                System.out.println("[LogPane] Received test.websocket event: " + id + ", description: " + description);
+
+            // Log filtering details for debugging
+            System.out.println("[LogPane] Parsed event: id=" + id + ", source=" + source + ", category=" + category +
+                    ", level=" + LogLevel.toString(level) + ", description=" + description +
+                    ", deviceId=" + eventDeviceId);
+
+            // Apply server-side filter equivalent (level=255, excludeCategory=["logger.pane", "logger.server"])
+            if (category.equals("logger.pane") || category.equals("logger.server")) {
+                System.out.println("[LogPane] Event filtered out by category: " + id + ", category=" + category);
+                return;
             }
+            if ((level & 255) == 0) {
+                System.out.println("[LogPane] Event filtered out by level: " + id + ", level=" + level);
+                return;
+            }
+
             LogEvent event = new LogEvent(id, level, category, description, timestamp, source, correlationId, stacktrace,
-                    title, code, data, deviceId, includeStacktrace);
+                    title, code, data, eventDeviceId, includeStacktrace);
             synchronized (allLogs) {
                 event.stacktraceExpanded = defaultStackExpanded;
                 allLogs.add(event);
@@ -348,6 +407,10 @@ public class LogPane {
         }
     }
 
+    public JComponent getContent() {
+        return content;
+    }
+
     public LogPane(Project project) {
         this.project = project;
         this.server = new WebSocketServerImpl(1065);
@@ -363,6 +426,16 @@ public class LogPane {
         };
         Arrays.stream(levelCheckBoxes).forEach(cb -> cb.setSelected(true));
         JPopupMenu levelPopup = new JPopupMenu();
+        JCheckBox selectAllLevels = new JCheckBox("Select All");
+        selectAllLevels.setSelected(true);
+        selectAllLevels.addActionListener(e -> {
+            boolean selected = selectAllLevels.isSelected();
+            Arrays.stream(levelCheckBoxes).forEach(cb -> cb.setSelected(selected));
+            updateLevelFilter();
+            updateLogDisplay();
+        });
+        levelPopup.add(selectAllLevels);
+        levelPopup.addSeparator();
         Arrays.stream(levelCheckBoxes).forEach(levelPopup::add);
         levelFilter.addMouseListener(new MouseAdapter() {
             @Override
@@ -371,6 +444,7 @@ public class LogPane {
             }
         });
         Arrays.stream(levelCheckBoxes).forEach(cb -> cb.addActionListener(e -> {
+            selectAllLevels.setSelected(Arrays.stream(levelCheckBoxes).allMatch(JCheckBox::isSelected));
             updateLevelFilter();
             updateLogDisplay();
         }));
@@ -383,11 +457,13 @@ public class LogPane {
                 super.setSelectionInterval(index0, index1);
                 updateLogDisplay();
             }
+
             @Override
             public void addSelectionInterval(int index0, int index1) {
                 super.addSelectionInterval(index0, index1);
                 updateLogDisplay();
             }
+
             @Override
             public void removeSelectionInterval(int index0, int index1) {
                 super.removeSelectionInterval(index0, index1);
@@ -420,7 +496,6 @@ public class LogPane {
                 updateLogDisplay();
             }
         });
-        categoryFilter.setText("test.websocket");
         connectButton = new JButton("Connect");
         connectButton.addActionListener(e -> toggleConnection());
         settingsButton = new JButton("⚙️");
@@ -455,14 +530,10 @@ public class LogPane {
         updateLevelFilter();
         updateSourceFilterDisplay();
         updateConnectButton();
-        // Automatically connect on initialization
+        // Automatically connect on initialization if not using local server
         if (!useLocalServer) {
             toggleConnection();
         }
-    }
-
-    public JComponent getContent() {
-        return content;
     }
 
     private boolean isPortAvailable(int port) {
@@ -470,6 +541,7 @@ public class LogPane {
             socket.setReuseAddress(true);
             return true;
         } catch (IOException e) {
+            System.out.println("[LogPane] Port " + port + " check failed: " + e.getMessage());
             return false;
         }
     }
@@ -484,10 +556,13 @@ public class LogPane {
             }
             isConnected.set(false);
             reconnectAttempts = 0;
+            processedEventIds.clear(); // Clear processed IDs on disconnect
             updateConnectButton();
+            System.out.println("[LogPane] Disconnected from " + wsUrl);
         } else {
             if (useLocalServer) {
                 if (!isPortAvailable(1065)) {
+                    System.out.println("[LogPane] Port 1065 is in use, cannot start local server");
                     Messages.showMessageDialog(project,
                             "Port 1065 is already in use. Please free the port or connect to an existing server.",
                             "Error", Messages.getErrorIcon());
@@ -496,14 +571,16 @@ public class LogPane {
                 try {
                     server.start();
                 } catch (Exception e) {
+                    System.out.println("[LogPane] Failed to start WebSocket server: " + e.getMessage() + ", stacktrace: " + Arrays.toString(e.getStackTrace()));
                     Messages.showMessageDialog(project, "Failed to start WebSocket server: " + e.getMessage(), "Error", Messages.getErrorIcon());
                 }
             } else {
                 try {
-                    client = new WebSocketClientImpl(new URI(wsUrl));
+                    System.out.println("[LogPane] Attempting connection to " + wsUrl + "?deviceId=" + deviceId);
+                    client = new WebSocketClientImpl(new URI(wsUrl + "?deviceId=" + URLEncoder.encode(deviceId, StandardCharsets.UTF_8.name())));
                     client.connect();
                 } catch (Exception e) {
-                    System.out.println("[LogPane] Failed to initiate WebSocket client connection: " + e.getMessage());
+                    System.out.println("[LogPane] Failed to initiate WebSocket client connection to " + wsUrl + ": " + e.getMessage() + ", stacktrace: " + Arrays.toString(e.getStackTrace()));
                     Messages.showMessageDialog(project, "Failed to connect to WebSocket server: " + e.getMessage(), "Error", Messages.getErrorIcon());
                 }
             }
