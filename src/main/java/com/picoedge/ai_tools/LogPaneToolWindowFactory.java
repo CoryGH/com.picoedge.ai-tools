@@ -7,18 +7,19 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.*;
-import java.util.Properties;
-
-// Factory class to create the logger tool window in IntelliJ-based IDEs
 public class LogPaneToolWindowFactory implements ToolWindowFactory {
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        // Create the LogPane UI component
         LogPane logPane = new LogPane(project);
-        // Create content for the tool window
-        Content content = ContentFactory.getInstance().createContent(logPane.getContent(), "", false);
-        // Add content to the tool window
-        toolWindow.getContentManager().addContent(content);
+        System.out.println("[LogPaneToolWindowFactory] Created LogPane instance for project: " + project.getName());
+        try {
+            Content content = ContentFactory.getInstance().createContent(logPane.getContent(), "", false);
+            System.out.println("[LogPaneToolWindowFactory] Created content for tool window: " + toolWindow.getId());
+            toolWindow.getContentManager().addContent(content);
+            System.out.println("[LogPaneToolWindowFactory] Added content to tool window: " + toolWindow.getId());
+        } catch (Exception e) {
+            System.err.println("[LogPaneToolWindowFactory] Failed to create tool window content: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
